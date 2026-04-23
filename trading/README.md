@@ -27,6 +27,14 @@ Run the workflow from the project root:
 python -m trading.virtual_wallet_workflow
 ```
 
+To start it in the background so it keeps running after you close the terminal:
+
+```powershell
+python -m trading.virtual_wallet_workflow --detach
+```
+
+The detached process writes its console output to [trading/logs/virtual_wallet_daemon.log](trading/logs/virtual_wallet_daemon.log) and continues running on Windows, Linux, and cloud VMs.
+
 The workflow expects IG credentials from environment variables:
 
 ```powershell

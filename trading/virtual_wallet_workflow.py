@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import asdict, dataclass, field
 import json
 import math
+import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 from typing import Any
@@ -41,6 +44,8 @@ DEFAULT_MARKET_CLOSED_SLEEP_SECONDS = 30.0
 DEFAULT_RESTART_BACKOFF_SECONDS = 30.0
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().with_name("virtual_wallet_config.json")
 DEFAULT_LOG_PATH = Path(__file__).resolve().parent / "logs" / "virtual_wallet_live.csv"
+DEFAULT_DAEMON_STDOUT_PATH = Path(__file__).resolve().parent / "logs" / "virtual_wallet_daemon.log"
+DETACH_ENV_VAR = "TRADING_WORKFLOW_FOREGROUND"
 
 
 @dataclass(frozen=True)
@@ -906,9 +911,65 @@ def run_live_virtual_trading_forever(config: WorkflowConfig | None = None) -> No
             time.sleep(restart_backoff_seconds)
 
 
-def main() -> None:
+def launch_detached_live_virtual_trading(
+    config: WorkflowConfig | None = None,
+    *,
+    stdout_path: Path = DEFAULT_DAEMON_STDOUT_PATH,
+) -> subprocess.Popen[bytes]:
+    project_root = Path(__file__).resolve().parents[1]
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    stdout_handle = stdout_path.open("ab", buffering=0)
+
+    env = os.environ.copy()
+    env[DETACH_ENV_VAR] = "1"
+
+    command = [sys.executable, "-m", "trading.virtual_wallet_workflow"]
+    if config is not None:
+        command.extend(["--config", str(config.config_path)])
+    creationflags = 0
+    popen_kwargs: dict[str, Any] = {
+        "cwd": str(project_root),
+        "stdin": subprocess.DEVNULL,
+        "stdout": stdout_handle,
+        "stderr": subprocess.STDOUT,
+        "env": env,
+    }
+
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        popen_kwargs["creationflags"] = creationflags
+    else:
+        popen_kwargs["start_new_session"] = True
+
     try:
-        run_live_virtual_trading_forever()
+        return subprocess.Popen(command, **popen_kwargs)
+    finally:
+        stdout_handle.close()
+
+
+def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the live virtual trading workflow.")
+    parser.add_argument("--detach", action="store_true", help="Start a detached background process and exit immediately.")
+    parser.add_argument("--config", type=Path, default=None, help="Optional workflow config path.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_cli_args(argv)
+    config = WorkflowConfig(config_path=args.config) if args.config is not None else None
+
+    if args.detach:
+        process = launch_detached_live_virtual_trading(config)
+        print(f"Trading workflow started in background with PID {process.pid}.")
+        print(f"Daemon log: {DEFAULT_DAEMON_STDOUT_PATH}")
+        return
+
+    if os.environ.get(DETACH_ENV_VAR) == "1":
+        run_live_virtual_trading_forever(config)
+        return
+
+    try:
+        run_live_virtual_trading_forever(config)
     except IGException as exc:
         raise SystemExit(f"IG session failed: {exc}") from exc
     except (RuntimeError, ValueError, OSError) as exc:
