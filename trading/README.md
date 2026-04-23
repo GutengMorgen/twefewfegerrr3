@@ -15,10 +15,10 @@ This project uses one mandatory entry point: `trading/virtual_wallet_workflow.py
 
 ## Run It
 
-Install the runtime dependencies from the project root:
+Install the runtime dependencies from the trading package:
 
 ```powershell
-python -m pip install -r requirements-trading.txt
+python -m pip install -r trading/requirements-trading.txt
 ```
 
 Run the workflow from the project root:
