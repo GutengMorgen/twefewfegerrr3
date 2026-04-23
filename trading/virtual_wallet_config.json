@@ -1,0 +1,42 @@
+{
+  "enabled": true,
+  "reload_interval_seconds": 15,
+  "workflow": {
+    "epic": "IX.D.NASDAQ.IFMM.IP",
+    "strategy_name": "std_levels_touch_density",
+    "stream_print_seconds": 1.0
+  },
+  "processes": {
+    "stream_price": true,
+    "strategy": true,
+    "execution": true
+  },
+  "stream": {
+    "reconnect_delay_seconds": 1.0,
+    "max_consecutive_failures": 5,
+    "poll_interval_seconds": 0.2,
+    "ticker_timeout_seconds": 10.0,
+    "buffer_size": 1024
+  },
+  "terminal": {
+    "show_timestamp": false,
+    "show_price": true,
+    "show_spread": false,
+    "show_market": false,
+    "show_stream_status": true,
+    "show_strategy_status": true,
+    "show_execution_status": true,
+    "show_positions": false,
+    "show_unrealized_pnl": true,
+    "show_equity": true,
+    "show_signal_criteria": true,
+    "show_market_metadata": true,
+    "show_account_metadata": true,
+    "show_trade_extremes": false,
+    "show_volume": false,
+    "show_bar_ohlc": false
+  },
+  "logging": {
+    "csv_path": "logs/virtual_wallet_live.csv"
+  }
+}
