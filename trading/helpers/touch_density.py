@@ -5,8 +5,6 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from engine_core.indicators.dc_logger_stats import build_std_levels, compute_daily_change_stats
-
 
 LEVEL_MULTIPLIERS = np.asarray((0.5, 1.0, 1.5), dtype=np.float64)
 
@@ -16,6 +14,17 @@ class TouchDensitySeries:
     signal: np.ndarray
     long_density: np.ndarray
     short_density: np.ndarray
+
+
+@dataclass(frozen=True)
+class DailyStatsSeries:
+    day_id: np.ndarray
+    day_start_indices: np.ndarray
+    day_open: np.ndarray
+    day_close: np.ndarray
+    daily_change: np.ndarray
+    rolling_mean: np.ndarray
+    rolling_std: np.ndarray
 
 
 def _day_id_array(time_values: np.ndarray) -> np.ndarray:
@@ -36,6 +45,91 @@ def _day_boundaries(day_id: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     starts = np.concatenate((np.array([0], dtype=np.int64), change_points.astype(np.int64)))
     ends = np.concatenate((change_points.astype(np.int64), np.array([day_id.size], dtype=np.int64)))
     return starts, ends
+
+
+def _rolling_sample_mean_std(values: np.ndarray, lookback_days: int) -> tuple[np.ndarray, np.ndarray]:
+    if lookback_days < 1:
+        raise ValueError("lookback_days must be >= 1")
+
+    count = int(values.size)
+    rolling_mean = np.full(count, np.nan, dtype=np.float64)
+    rolling_std = np.full(count, np.nan, dtype=np.float64)
+
+    if count == 0:
+        return rolling_mean, rolling_std
+
+    csum = np.cumsum(values, dtype=np.float64)
+    csum_sq = np.cumsum(values * values, dtype=np.float64)
+
+    for index in range(count):
+        start = max(0, index - lookback_days + 1)
+        window_count = index - start + 1
+        window_total = csum[index] - (csum[start - 1] if start > 0 else 0.0)
+        window_total_sq = csum_sq[index] - (csum_sq[start - 1] if start > 0 else 0.0)
+
+        mean = window_total / float(window_count)
+        rolling_mean[index] = mean
+
+        if window_count < 2:
+            continue
+
+        population_var = (window_total_sq / float(window_count)) - (mean * mean)
+        if population_var < 0.0:
+            population_var = 0.0
+        rolling_std[index] = float(np.sqrt(population_var * float(window_count) / float(window_count - 1)))
+
+    return rolling_mean, rolling_std
+
+
+def compute_daily_change_stats(
+    open_values: np.ndarray,
+    close_values: np.ndarray,
+    day_id: np.ndarray,
+    lookback_days: int,
+) -> DailyStatsSeries:
+    if open_values.ndim != 1 or close_values.ndim != 1 or day_id.ndim != 1:
+        raise ValueError("open_values, close_values, and day_id must be 1D arrays")
+    if open_values.size != close_values.size or open_values.size != day_id.size:
+        raise ValueError("open_values, close_values, and day_id must have the same length")
+
+    day_starts, day_ends = _day_boundaries(day_id)
+    if day_starts.size == 0:
+        empty_float = np.empty(0, dtype=np.float64)
+        empty_int = np.empty(0, dtype=np.int64)
+        return DailyStatsSeries(empty_int, empty_int, empty_float, empty_float, empty_float, empty_float, empty_float)
+
+    day_open = np.asarray(open_values[day_starts], dtype=np.float64)
+    day_close = np.asarray(close_values[day_ends - 1], dtype=np.float64)
+    safe_open = np.where(day_open != 0.0, day_open, np.nan)
+    daily_change = np.where(np.isfinite(safe_open), (day_close - day_open) / safe_open, 0.0)
+    rolling_mean, rolling_std = _rolling_sample_mean_std(daily_change, lookback_days)
+
+    return DailyStatsSeries(
+        day_id=np.asarray(day_id[day_starts], dtype=np.int64),
+        day_start_indices=np.asarray(day_starts, dtype=np.int64),
+        day_open=day_open,
+        day_close=day_close,
+        daily_change=daily_change,
+        rolling_mean=rolling_mean,
+        rolling_std=rolling_std,
+    )
+
+
+def build_std_levels(
+    base_price: float,
+    mean_value: float,
+    std_value: float,
+    multipliers: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    if multipliers.ndim != 1:
+        raise ValueError("multipliers must be a 1D array")
+
+    upper_factor = (std_value + mean_value) * base_price
+    lower_factor = (std_value - mean_value) * base_price
+
+    upper_levels = base_price + (upper_factor * multipliers)
+    lower_levels = base_price - (lower_factor * multipliers)
+    return upper_levels.astype(np.float64, copy=False), lower_levels.astype(np.float64, copy=False)
 
 
 def _gaussian_kernel(width: int) -> np.ndarray:
