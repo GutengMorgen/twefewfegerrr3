@@ -129,6 +129,7 @@ Strategy defaults stay inside each strategy module. The registry in `trading/str
 
 Available strategies include:
 
+- `breakout_0600_0730`
 - `ema_cross`
 - `simple_momentum`
 - `std_levels_touch_density`

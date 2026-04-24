@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from trading.strategies.base import StrategyConfig, StrategyPlugin
+from trading.strategies.breakout_0600_0730 import Breakout0600Config, Breakout0600Strategy
 from trading.strategies.ema_cross import EMACrossConfig, EMACrossStrategy
 from trading.strategies.std_levels_touch_density import StdLevelsTouchDensityConfig, StdLevelsTouchDensityStrategy
 from trading.strategies.simple_momentum import SimpleMomentumConfig, SimpleMomentumStrategy
@@ -66,6 +67,7 @@ class StrategyRegistry:
 
 
 DEFAULT_STRATEGY_REGISTRY = StrategyRegistry()
+DEFAULT_STRATEGY_REGISTRY.register("breakout_0600_0730", Breakout0600Strategy, Breakout0600Config)
 DEFAULT_STRATEGY_REGISTRY.register("ema_cross", EMACrossStrategy, EMACrossConfig)
 DEFAULT_STRATEGY_REGISTRY.register("simple_momentum", SimpleMomentumStrategy, SimpleMomentumConfig)
 DEFAULT_STRATEGY_REGISTRY.register(

@@ -3,7 +3,7 @@
   "reload_interval_seconds": 15,
   "workflow": {
     "epic": "IX.D.NASDAQ.IFMM.IP",
-    "strategy_name": "std_levels_touch_density",
+    "strategy_name": "breakout_0600_0730",
     "stream_print_seconds": 1.0
   },
   "processes": {
