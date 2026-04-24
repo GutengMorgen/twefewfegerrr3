@@ -41,7 +41,7 @@ from trading.helpers.market import MarketTradingState, load_market_spec, market_
 from trading.streaming.price_feed import LiveBarBuilder, LivePriceFeed, LivePriceFeedConfig
 from trading.strategies.base import StrategyContext, StrategyDecision, StrategyLiveSnapshot
 from trading.strategies.registry import DEFAULT_STRATEGY_REGISTRY
-from trading.ig_nq_data import build_service, get_market_by_epic, load_credentials, load_or_fetch_historical_ohlcv
+from trading.ig_nq_data import build_service, get_market_by_epic, load_credentials
 
 
 DEFAULT_EPIC = "IX.D.NASDAQ.IFMM.IP"
@@ -563,9 +563,6 @@ def run_live_virtual_trading(config: WorkflowConfig | None = None) -> tuple[Acco
     engine = SimulatedExecutionEngine()
     logger = CsvRunLogger(workflow_config.logging.csv_path)
     terminal = RichLiveTerminal(workflow_config.terminal_display, title=f"{market_spec.name} | {workflow_config.strategy_name or 'disabled'}")
-
-    historical_bars = load_or_fetch_historical_ohlcv(service, workflow_config.epic)
-    bar_builder.load_history(historical_bars)
 
     strategy = (
         DEFAULT_STRATEGY_REGISTRY.create(workflow_config.strategy_name, workflow_config.strategy_overrides)
