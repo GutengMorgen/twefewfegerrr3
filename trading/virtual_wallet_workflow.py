@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 import json
 import math
 import os
+import select
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,11 @@ from typing import Any
 
 import pandas as pd
 from trading_ig.rest import IGException
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - Windows-only import
+    msvcrt = None
 
 # Allow running this file directly in addition to module mode.
 if __package__ in {None, ""}:
@@ -46,6 +52,7 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().with_name("virtual_wallet_config.
 DEFAULT_LOG_PATH = Path(__file__).resolve().parent / "logs" / "virtual_wallet_live.csv"
 DEFAULT_DAEMON_STDOUT_PATH = Path(__file__).resolve().parent / "logs" / "virtual_wallet_daemon.log"
 DETACH_ENV_VAR = "TRADING_WORKFLOW_FOREGROUND"
+KEYPOLL_INTERVAL_SECONDS = 0.2
 
 
 @dataclass(frozen=True)
@@ -190,6 +197,48 @@ def _resolve_order_size(decision: StrategyDecision, default_size: float) -> floa
     if not math.isfinite(order_size) or order_size <= 0.0:
         raise ValueError(f"decision size must be > 0 and finite; received {raw_size!r}")
     return round(order_size, 2)
+
+
+def _any_key_pressed() -> bool:
+    if msvcrt is not None:
+        if msvcrt.kbhit():
+            try:
+                msvcrt.getwch()
+            except OSError:
+                pass
+            return True
+        return False
+
+    stdin = sys.stdin
+    if stdin is None or not stdin.isatty():
+        return False
+
+    try:
+        readable, _, _ = select.select([stdin], [], [], 0)
+    except (OSError, ValueError):
+        return False
+
+    if not readable:
+        return False
+
+    try:
+        stdin.read(1)
+    except OSError:
+        pass
+    return True
+
+
+def _sleep_interruptibly(seconds: float, *, poll_interval: float = KEYPOLL_INTERVAL_SECONDS) -> bool:
+    deadline = time.monotonic() + max(float(seconds), 0.0)
+    while True:
+        if _any_key_pressed():
+            return True
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            return False
+
+        time.sleep(min(poll_interval, remaining))
 
 
 def _build_position_summary(wallet: AccountInventory, epic: str) -> dict[str, Any]:
@@ -601,7 +650,8 @@ def run_live_virtual_trading(config: WorkflowConfig | None = None) -> tuple[Acco
                 if not market_state.is_open:
                     if feed.is_running():
                         feed.stop()
-                    time.sleep(market_closed_retry_seconds)
+                    if _sleep_interruptibly(market_closed_retry_seconds):
+                        break
                     continue
 
                 if workflow_config.stream_price_enabled:
@@ -612,7 +662,8 @@ def run_live_virtual_trading(config: WorkflowConfig | None = None) -> tuple[Acco
 
                 tick = feed.read_tick()
                 if tick is None:
-                    time.sleep(workflow_config.stream.poll_interval_seconds)
+                    if _sleep_interruptibly(workflow_config.stream.poll_interval_seconds):
+                        break
                     continue
 
                 pre_execution_snapshot = wallet.snapshot(tick.mid)
@@ -889,7 +940,8 @@ def run_live_virtual_trading(config: WorkflowConfig | None = None) -> tuple[Acco
                     terminal.update(live_snapshot)
                     last_print = now
 
-                time.sleep(workflow_config.stream.poll_interval_seconds)
+                if _sleep_interruptibly(workflow_config.stream.poll_interval_seconds):
+                    break
     except KeyboardInterrupt:
         pass
     finally:
@@ -908,7 +960,8 @@ def run_live_virtual_trading_forever(config: WorkflowConfig | None = None) -> No
             raise
         except (IGException, RuntimeError, ValueError, OSError) as exc:
             print(f"Trading workflow stopped unexpectedly: {exc}", file=sys.stderr)
-            time.sleep(restart_backoff_seconds)
+            if _sleep_interruptibly(restart_backoff_seconds):
+                raise KeyboardInterrupt
 
 
 def launch_detached_live_virtual_trading(

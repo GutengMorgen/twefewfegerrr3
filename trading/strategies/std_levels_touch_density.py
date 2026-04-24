@@ -125,6 +125,14 @@ class StdLevelsTouchDensityStrategy(StrategyPlugin):
                 },
             )
 
+        series = compute_touch_density_from_bars(
+            context.bars,
+            lookback_days=self.config.lookback_days,
+            kernel_width=self.config.kernel_width,
+            signal_timeframe_minutes=self.config.signal_timeframe_minutes,
+        )
+        long_density = float(series.long_density[-1]) if series.long_density.size else 0.0
+        short_density = float(series.short_density[-1]) if series.short_density.size else 0.0
         held_bars = max(signal_count - self._entry_index, 0) if self._in_position else 0
         state = "flat"
         if self._in_position:
@@ -134,34 +142,34 @@ class StdLevelsTouchDensityStrategy(StrategyPlugin):
             StrategySignalCriterion(
                 kind="entry",
                 label="long",
-                current=score,
+                current=long_density,
                 target=self.config.entry_threshold,
                 comparator=">=",
-                active=score >= self.config.entry_threshold,
+                active=long_density >= self.config.entry_threshold,
             ),
             StrategySignalCriterion(
                 kind="entry",
                 label="short",
-                current=score,
-                target=-self.config.entry_threshold,
-                comparator="<=",
-                active=score <= -self.config.entry_threshold,
+                current=short_density,
+                target=self.config.entry_threshold,
+                comparator=">=",
+                active=short_density >= self.config.entry_threshold,
             ),
             StrategySignalCriterion(
                 kind="exit",
                 label="long",
-                current=score,
+                current=long_density,
                 target=self.config.exit_threshold,
                 comparator="<=",
-                active=self._in_position and self._side == 1 and (score <= self.config.exit_threshold or held_bars >= self.config.max_hold_bars),
+                active=self._in_position and self._side == 1 and (long_density <= self.config.exit_threshold or held_bars >= self.config.max_hold_bars),
             ),
             StrategySignalCriterion(
                 kind="exit",
                 label="short",
-                current=score,
-                target=-self.config.exit_threshold,
-                comparator=">=",
-                active=self._in_position and self._side == -1 and (score >= -self.config.exit_threshold or held_bars >= self.config.max_hold_bars),
+                current=short_density,
+                target=self.config.exit_threshold,
+                comparator="<=",
+                active=self._in_position and self._side == -1 and (short_density <= self.config.exit_threshold or held_bars >= self.config.max_hold_bars),
             ),
             StrategySignalCriterion(
                 kind="info",
