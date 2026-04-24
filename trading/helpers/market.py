@@ -60,8 +60,13 @@ def _normalize_market_status(value: Any) -> str:
 
 
 def market_trading_state(market: Any) -> MarketTradingState:
+    snapshot = _field_value(market, "snapshot", {})
     market_status = _normalize_market_status(
-        _field_value(market, "marketStatus", _field_value(market, "status", ""))
+        _field_value(
+            market,
+            "marketStatus",
+            _field_value(market, "status", _field_value(snapshot, "marketStatus", _field_value(snapshot, "status", ""))),
+        )
     )
     is_open = market_status in {"TRADEABLE", "OPEN", "DEALABLE"}
     reason = None if is_open else f"marketStatus={market_status}"
